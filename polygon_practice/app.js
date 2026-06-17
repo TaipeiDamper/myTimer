@@ -1,6 +1,6 @@
 /**
  * Polygon Shape Practice Tool
- * Single / Composition / Custom modes with grid-based polygon generation.
+ * Single / Complex / Custom modes with grid-based polygon generation.
  */
 
 (function () {
@@ -17,12 +17,7 @@
         { stroke: '#059669', fill: 'rgba(5, 150, 105, 0.22)' }
     ];
 
-    const COMPOSITION_COLORS = [
-        { stroke: '#10b981', fill: 'rgba(16, 185, 129, 0.22)' },
-        { stroke: '#38bdf8', fill: 'rgba(56, 189, 248, 0.22)' },
-        { stroke: '#fbbf24', fill: 'rgba(251, 191, 36, 0.22)' },
-        { stroke: '#fb7185', fill: 'rgba(251, 113, 133, 0.22)' }
-    ];
+    const COMPLEX_SOLID_COLOR = '#10b981';
 
     const els = {
         modeTabs: document.querySelectorAll('.mode-tab'),
@@ -38,9 +33,7 @@
         curveStrength: document.getElementById('curve-strength'),
         curveStrengthLabel: document.getElementById('curve-strength-label'),
         shapeCount: document.getElementById('shape-count'),
-        shapeCountLabel: document.querySelector('label[for="shape-count"]'),
         shapeCountHint: document.getElementById('shape-count-hint'),
-        allowOverlap: document.getElementById('allow-overlap'),
         timerDuration: document.getElementById('timer-duration'),
         timerCustom: document.getElementById('timer-custom'),
         btnGenerate: document.getElementById('btn-generate'),
@@ -48,7 +41,8 @@
         timerGroup: document.getElementById('timer-group'),
         btnFinishPoints: document.getElementById('btn-finish-points'),
         btnStartCustom: document.getElementById('btn-start-custom'),
-        btnClearCustom: document.getElementById('btn-clear-custom'),
+        btnClearLastCustom: document.getElementById('btn-clear-last-custom'),
+        btnClearAllCustom: document.getElementById('btn-clear-all-custom'),
         btnReveal: document.getElementById('btn-reveal'),
         btnRegenerate: document.getElementById('btn-regenerate'),
         statusLabel: document.getElementById('status-label'),
@@ -68,7 +62,7 @@
         phase: 'idle',
         polygons: [],
         customPoints: [],
-        customClosed: false,
+        customDrafts: [],
         customEdgeMeta: null,
         showGenDots: false,
         timeLeft: 60,
@@ -109,37 +103,24 @@
             edgeType: els.edgeType.value,
             curveStrength: clampNumber(els.curveStrength.value, 5, 70, 30) / 100,
             shapeCount: clampInteger(els.shapeCount.value, 2, 4, 3),
-            allowOverlap: Boolean(els.allowOverlap?.checked),
             displayMode: document.querySelector('input[name="display-mode"]:checked')?.value || 'outline',
             timerSeconds: timerVal
         };
     }
 
     function getShapeColors() {
-        if (state.mode === 'composition') return COMPOSITION_COLORS;
         return SHAPE_COLORS;
     }
 
-    function updateShapeCountHint() {
-        if (state.mode === 'complex') {
-            if (els.shapeCountLabel) els.shapeCountLabel.textContent = '由幾個形狀組合？';
-            if (els.shapeCountHint) {
-                els.shapeCountHint.textContent = '困難模式：多形合併填滿後取外框（輪廓或填滿）';
-            }
-        } else if (state.mode === 'composition') {
-            if (els.shapeCountLabel) els.shapeCountLabel.textContent = '要畫幾個形狀？';
-            if (els.shapeCountHint) {
-                const overlap = els.allowOverlap?.checked;
-                els.shapeCountHint.textContent = overlap
-                    ? '構圖模式：形狀可分布於各角落並互相重疊'
-                    : '構圖模式：形狀分區擺放，彼此不重疊';
-            }
-        } else {
-            if (els.shapeCountLabel) els.shapeCountLabel.textContent = '要畫幾個形狀？';
-            if (els.shapeCountHint) {
-                els.shapeCountHint.textContent = '構圖模式：形狀分區擺放，彼此不重疊';
-            }
+    function usesSolidPracticeDisplay() {
+        return state.mode === 'complex' || state.mode === 'custom';
+    }
+
+    function getSolidPracticeStyle(displayMode) {
+        if (displayMode === 'fill') {
+            return { stroke: COMPLEX_SOLID_COLOR, fill: COMPLEX_SOLID_COLOR };
         }
+        return { stroke: COMPLEX_SOLID_COLOR, fill: 'none' };
     }
 
     function syncSettingsInputs() {
@@ -298,64 +279,40 @@
         return colors[idx % colors.length];
     }
 
-    function filterPointsInZone(points, zone, cols, rows) {
-        const colMin = Math.max(0, Math.floor(zone.colMin));
-        const colMax = Math.min(cols, Math.ceil(zone.colMax));
-        const rowMin = Math.max(0, Math.floor(zone.rowMin));
-        const rowMax = Math.min(rows, Math.ceil(zone.rowMax));
-        return points.filter(p => p.col >= colMin && p.col <= colMax && p.row >= rowMin && p.row <= rowMax);
-    }
-
-    function getCompositionZones(count, cols, rows, allowOverlap) {
+    function getCompositionAnchors(count, cols, rows) {
         const c = cols;
         const r = rows;
-
-        if (!allowOverlap) {
-            if (count === 2) {
-                const midC = Math.max(1, Math.floor(c / 2));
-                return [
-                    { colMin: 0, colMax: midC, rowMin: 0, rowMax: r },
-                    { colMin: midC, colMax: c, rowMin: 0, rowMax: r }
-                ];
-            }
-            if (count === 4) {
-                const midC = Math.max(1, Math.floor(c / 2));
-                const midR = Math.max(1, Math.floor(r / 2));
-                return [
-                    { colMin: 0, colMax: midC, rowMin: 0, rowMax: midR },
-                    { colMin: midC, colMax: c, rowMin: 0, rowMax: midR },
-                    { colMin: 0, colMax: midC, rowMin: midR, rowMax: r },
-                    { colMin: midC, colMax: c, rowMin: midR, rowMax: r }
-                ];
-            }
-            const zones = [];
-            for (let i = 0; i < count; i += 1) {
-                const colStart = Math.floor((i * (c + 1)) / count);
-                const colEnd = Math.floor(((i + 1) * (c + 1)) / count) - 1;
-                zones.push({ colMin: colStart, colMax: colEnd, rowMin: 0, rowMax: r });
-            }
-            return zones;
-        }
-
-        const pad = Math.max(1, Math.floor(Math.min(c, r) * 0.32));
-        const overlapZones = {
+        const anchors = {
             2: [
-                { colMin: 0, colMax: c - pad, rowMin: 0, rowMax: r - pad },
-                { colMin: pad, colMax: c, rowMin: pad, rowMax: r }
+                { col: Math.max(1, Math.round(c * 0.2)), row: Math.max(1, Math.round(r * 0.25)) },
+                { col: Math.min(c - 1, Math.round(c * 0.8)), row: Math.min(r - 1, Math.round(r * 0.75)) }
             ],
             3: [
-                { colMin: 0, colMax: c - pad, rowMin: 0, rowMax: r - pad },
-                { colMin: pad, colMax: c, rowMin: 0, rowMax: r - pad },
-                { colMin: 0, colMax: c, rowMin: pad, rowMax: r }
+                { col: Math.max(1, Math.round(c * 0.15)), row: Math.max(1, Math.round(r * 0.2)) },
+                { col: Math.min(c - 1, Math.round(c * 0.85)), row: Math.max(1, Math.round(r * 0.25)) },
+                { col: Math.round(c * 0.5), row: Math.min(r - 1, Math.round(r * 0.85)) }
             ],
             4: [
-                { colMin: 0, colMax: c - pad, rowMin: 0, rowMax: r - pad },
-                { colMin: pad, colMax: c, rowMin: 0, rowMax: r - pad },
-                { colMin: 0, colMax: c - pad, rowMin: pad, rowMax: r },
-                { colMin: pad, colMax: c, rowMin: pad, rowMax: r }
+                { col: Math.max(1, Math.round(c * 0.15)), row: Math.max(1, Math.round(r * 0.15)) },
+                { col: Math.min(c - 1, Math.round(c * 0.85)), row: Math.max(1, Math.round(r * 0.15)) },
+                { col: Math.max(1, Math.round(c * 0.15)), row: Math.min(r - 1, Math.round(r * 0.85)) },
+                { col: Math.min(c - 1, Math.round(c * 0.85)), row: Math.min(r - 1, Math.round(r * 0.85)) }
             ]
         };
-        return shuffleArray(overlapZones[count] || overlapZones[3]);
+        return shuffleArray(anchors[count] || anchors[3]);
+    }
+
+    function poolAroundAnchor(allPoints, anchor, cols, rows, spreadRatio) {
+        const spread = Math.max(2, Math.ceil(Math.min(cols, rows) * spreadRatio));
+        const pool = allPoints.filter(p => (
+            Math.abs(p.col - anchor.col) <= spread
+            && Math.abs(p.row - anchor.row) <= spread
+        ));
+        return pool.length >= 3 ? pool : allPoints;
+    }
+
+    function getComplexPartZones(count, cols, rows) {
+        return getCompositionAnchors(count, cols, rows).map(anchor => ({ anchor }));
     }
 
     function dedupeNearbyVertices(vertices, minDist) {
@@ -545,7 +502,7 @@
     function isGridLocked() {
         return state.phase === 'timing'
             || state.phase === 'revealed'
-            || (state.mode === 'custom' && state.customPoints.length > 0);
+            || (state.mode === 'custom' && (state.customPoints.length > 0 || state.customDrafts.length > 0));
     }
 
     function updateTimerTitle() {
@@ -610,17 +567,21 @@
         return [createPolygon(hull, settings)];
     }
 
-    function generateCompositionPolygons(settings, forceOverlap = null) {
+    function getPracticeAreaPath() {
+        return `M ${MARGIN} ${MARGIN} H ${CANVAS - MARGIN} V ${CANVAS - MARGIN} H ${MARGIN} Z`;
+    }
+
+    function generateComplexParts(settings) {
         const allPoints = buildGridPoints(settings.genCols, settings.genRows);
         const polygons = [];
         const count = settings.shapeCount;
         const k = randomVertexCount(settings.vertexCount);
-        const allowOverlap = forceOverlap !== null ? forceOverlap : settings.allowOverlap;
-        const zones = getCompositionZones(count, settings.genCols, settings.genRows, allowOverlap);
+        const zones = getComplexPartZones(count, settings.genCols, settings.genRows);
+        const spreadRatio = 0.72;
 
         for (let i = 0; i < count; i += 1) {
             const zone = zones[i % zones.length];
-            const pool = filterPointsInZone(allPoints, zone, settings.genCols, settings.genRows);
+            const pool = poolAroundAnchor(allPoints, zone.anchor, settings.genCols, settings.genRows, spreadRatio);
             const hull = sampleHullFromPoints(pool, Math.max(3, k - 1 + Math.floor(Math.random() * 2)));
             if (hull) {
                 polygons.push(createPolygon(hull, settings));
@@ -634,7 +595,7 @@
     }
 
     function generateComplexPolygons(settings) {
-        const parts = generateCompositionPolygons(settings, true);
+        const parts = generateComplexParts(settings);
         const silhouette = buildUnionSilhouette(parts, settings);
 
         if (silhouette) {
@@ -681,9 +642,13 @@
             els.timerDisplay.classList.remove('paused');
         }
 
-        els.btnFinishPoints.disabled = !isCustomEdit || state.customPoints.length < 3 || state.customClosed;
-        els.btnStartCustom.disabled = !isCustomEdit || state.customPoints.length < 3 || !state.customClosed;
-        els.btnClearCustom.disabled = !isCustomEdit || state.customPoints.length === 0;
+        const canStartCustom = isCustomEdit && state.customDrafts.length > 0;
+        const canClearCustom = isCustomEdit && (state.customPoints.length > 0 || state.customDrafts.length > 0);
+
+        els.btnFinishPoints.disabled = !isCustomEdit || state.customPoints.length < 3;
+        els.btnStartCustom.disabled = !canStartCustom;
+        els.btnClearLastCustom.disabled = !canClearCustom;
+        els.btnClearAllCustom.disabled = !canClearCustom;
 
         els.customHint.classList.toggle('hidden', !isCustom);
 
@@ -701,7 +666,7 @@
             els.btnRegenerate.disabled = false;
         } else if (isCustomEdit) {
             els.btnRegenerate.textContent = '重新選點';
-            els.btnRegenerate.disabled = state.customPoints.length === 0;
+            els.btnRegenerate.disabled = state.customPoints.length === 0 && state.customDrafts.length === 0;
         } else {
             els.btnRegenerate.textContent = '重新生成';
             els.btnRegenerate.disabled = true;
@@ -823,6 +788,11 @@
         if (state.mode === 'custom' && state.customPoints.length > 0) {
             state.customPoints.forEach(pt => keys.add(`${pt.col},${pt.row}`));
         }
+        if (state.mode === 'custom') {
+            state.customDrafts.forEach(draft => {
+                draft.vertices.forEach(v => keys.add(`${v.col},${v.row}`));
+            });
+        }
         return keys;
     }
 
@@ -838,10 +808,21 @@
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
 
         state.gridPoints.forEach(pt => {
+            if (state.mode === 'custom' && state.phase !== 'timing' && state.phase !== 'revealed') {
+                const hit = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                hit.setAttribute('cx', pt.x);
+                hit.setAttribute('cy', pt.y);
+                hit.setAttribute('r', 18);
+                hit.classList.add('gen-dot-hit');
+                hit.setAttribute('data-col', String(pt.col));
+                hit.setAttribute('data-row', String(pt.row));
+                g.appendChild(hit);
+            }
+
             const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
             circle.setAttribute('cx', pt.x);
             circle.setAttribute('cy', pt.y);
-            circle.setAttribute('r', state.mode === 'custom' ? 7 : 5);
+            circle.setAttribute('r', state.mode === 'custom' ? 9 : 5);
             circle.classList.add('gen-dot');
 
             const key = `${pt.col},${pt.row}`;
@@ -860,97 +841,140 @@
         els.layerGenDots.appendChild(g);
     }
 
+    function appendPolygonsToShapeGroup(polygons, settings, shapeGroup, options = {}) {
+        const displayMode = options.displayMode ?? settings.displayMode;
+        const useSolid = options.useSolid ?? usesSolidPracticeDisplay();
+        const colors = getShapeColors();
+        const pointerEvents = options.pointerEvents;
+
+        if (displayMode === 'invert') {
+            const combined = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            let d = getPracticeAreaPath();
+            polygons.forEach(poly => {
+                d += ` ${getPolygonPathD(poly, settings.curveStrength)}`;
+            });
+            combined.setAttribute('d', d);
+            combined.setAttribute('fill', useSolid ? COMPLEX_SOLID_COLOR : 'rgba(16, 185, 129, 0.35)');
+            combined.setAttribute('fill-rule', 'evenodd');
+            combined.setAttribute('stroke', 'none');
+            if (pointerEvents) combined.setAttribute('pointer-events', pointerEvents);
+            shapeGroup.appendChild(combined);
+
+            polygons.forEach((poly, idx) => {
+                const outline = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                outline.setAttribute('d', getPolygonPathD(poly, settings.curveStrength));
+                outline.setAttribute('fill', 'none');
+                const strokeColor = useSolid
+                    ? COMPLEX_SOLID_COLOR
+                    : getPolygonDisplayColor(idx, colors).stroke;
+                outline.setAttribute('stroke', strokeColor);
+                outline.setAttribute('stroke-width', '2');
+                if (pointerEvents) outline.setAttribute('pointer-events', pointerEvents);
+                shapeGroup.appendChild(outline);
+            });
+        } else {
+            polygons.forEach((poly, idx) => {
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                const style = useSolid
+                    ? getSolidPracticeStyle(displayMode)
+                    : {
+                        stroke: getPolygonDisplayColor(idx, colors).stroke,
+                        fill: displayMode === 'fill' ? getPolygonDisplayColor(idx, colors).fill : 'none'
+                    };
+                path.setAttribute('d', getPolygonPathD(poly, settings.curveStrength));
+                path.setAttribute('stroke', style.stroke);
+                path.setAttribute('stroke-width', '2.5');
+                path.setAttribute('fill', style.fill);
+                if (pointerEvents) path.setAttribute('pointer-events', pointerEvents);
+                shapeGroup.appendChild(path);
+            });
+        }
+    }
+
+    function getCustomPreviewPolygons(settings) {
+        return state.customDrafts.map(draft => ({
+            vertices: draft.vertices,
+            edgeMeta: draft.edgeMeta
+        }));
+    }
+
     function renderShapes(settings) {
         els.layerShapes.innerHTML = '';
         if (!state.polygons.length) return;
         if (state.mode === 'custom' && state.phase !== 'timing' && state.phase !== 'revealed') return;
 
-        const displayMode = settings.displayMode;
-        const colors = getShapeColors();
-        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-
-        if (displayMode === 'invert') {
-            const combined = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            let d = `M 0 0 H ${CANVAS} V ${CANVAS} H 0 Z`;
-            state.polygons.forEach(poly => {
-                d += ` ${getPolygonPathD(poly, settings.curveStrength)}`;
-            });
-            combined.setAttribute('d', d);
-            combined.setAttribute('fill', 'rgba(16, 185, 129, 0.35)');
-            combined.setAttribute('fill-rule', 'evenodd');
-            combined.setAttribute('stroke', 'none');
-            g.appendChild(combined);
-
-            state.polygons.forEach((poly, idx) => {
-                const outline = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                outline.setAttribute('d', getPolygonPathD(poly, settings.curveStrength));
-                outline.setAttribute('fill', 'none');
-                outline.setAttribute('stroke', getPolygonDisplayColor(idx, colors).stroke);
-                outline.setAttribute('stroke-width', '2');
-                g.appendChild(outline);
-            });
-        } else {
-            state.polygons.forEach((poly, idx) => {
-                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                const shapeColors = getPolygonDisplayColor(idx, colors);
-                path.setAttribute('d', getPolygonPathD(poly, settings.curveStrength));
-                path.setAttribute('stroke', shapeColors.stroke);
-                path.setAttribute('stroke-width', '2.5');
-                path.setAttribute('fill', displayMode === 'fill' ? shapeColors.fill : 'none');
-                g.appendChild(path);
-            });
-        }
-
-        els.layerShapes.appendChild(g);
+        const shapeGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        appendPolygonsToShapeGroup(state.polygons, settings, shapeGroup);
+        els.layerShapes.appendChild(shapeGroup);
     }
 
     function renderCustomLayer(settings) {
         els.layerCustom.innerHTML = '';
-        if (state.mode !== 'custom' || state.customPoints.length === 0) return;
+        if (state.mode !== 'custom') return;
         if (state.phase === 'timing' || state.phase === 'revealed') return;
 
+        const hasDrafts = state.customDrafts.length > 0;
+        const hasCurrent = state.customPoints.length > 0;
+        if (!hasDrafts && !hasCurrent) return;
+
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        const edgeMeta = getCustomEdgeMeta(settings);
-        const closed = state.customClosed;
-        const pathD = buildShapePath(state.customPoints, edgeMeta, settings.curveStrength, closed);
-
-        if (pathD) {
-            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            path.setAttribute('d', pathD);
-            path.setAttribute('stroke', '#10b981');
-            path.setAttribute('stroke-width', '2');
-            path.setAttribute('fill', closed ? 'rgba(16, 185, 129, 0.12)' : 'none');
-            g.appendChild(path);
+        const previewPolys = getCustomPreviewPolygons(settings);
+        if (previewPolys.length) {
+            appendPolygonsToShapeGroup(previewPolys, settings, g, {
+                useSolid: true,
+                pointerEvents: 'none'
+            });
         }
 
-        if (!closed && state.customPoints.length > 0 && state.ghostPoint) {
-            const last = state.customPoints[state.customPoints.length - 1];
-            const ghost = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            ghost.setAttribute('x1', last.x);
-            ghost.setAttribute('y1', last.y);
-            ghost.setAttribute('x2', state.ghostPoint.x);
-            ghost.setAttribute('y2', state.ghostPoint.y);
-            ghost.classList.add('ghost-line');
-            g.appendChild(ghost);
+        if (hasCurrent) {
+            const edgeMeta = getCustomEdgeMeta(settings);
+            const pathD = buildShapePath(state.customPoints, edgeMeta, settings.curveStrength, false);
+            if (pathD) {
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('d', pathD);
+                path.setAttribute('stroke', '#10b981');
+                path.setAttribute('stroke-width', '2');
+                path.setAttribute('stroke-dasharray', '6 4');
+                path.setAttribute('fill', 'none');
+                path.setAttribute('pointer-events', 'none');
+                g.appendChild(path);
+            }
+
+            if (state.ghostPoint) {
+                const last = state.customPoints[state.customPoints.length - 1];
+                const ghost = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                ghost.setAttribute('x1', last.x);
+                ghost.setAttribute('y1', last.y);
+                ghost.setAttribute('x2', state.ghostPoint.x);
+                ghost.setAttribute('y2', state.ghostPoint.y);
+                ghost.classList.add('ghost-line');
+                ghost.setAttribute('pointer-events', 'none');
+                g.appendChild(ghost);
+            }
+
+            state.customPoints.forEach((pt, idx) => {
+                const isFirst = idx === 0;
+                const canClose = state.customPoints.length >= 3 && isFirst;
+
+                const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                dot.setAttribute('cx', pt.x);
+                dot.setAttribute('cy', pt.y);
+                dot.setAttribute('r', canClose ? 11 : 8);
+                dot.setAttribute('fill', canClose ? '#fbbf24' : '#10b981');
+                dot.setAttribute('stroke', 'white');
+                dot.setAttribute('stroke-width', '2');
+                dot.setAttribute('pointer-events', 'none');
+                g.appendChild(dot);
+
+                const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                label.setAttribute('x', pt.x);
+                label.setAttribute('y', pt.y);
+                label.classList.add('custom-vertex-label');
+                label.setAttribute('pointer-events', 'none');
+                label.textContent = canClose ? '①' : String(idx + 1);
+                g.appendChild(label);
+            });
         }
-
-        state.customPoints.forEach((pt, idx) => {
-            const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            dot.setAttribute('cx', pt.x);
-            dot.setAttribute('cy', pt.y);
-            dot.setAttribute('r', 8);
-            dot.setAttribute('fill', '#10b981');
-            dot.setAttribute('stroke', 'white');
-            dot.setAttribute('stroke-width', '2');
-            g.appendChild(dot);
-
-            const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            label.setAttribute('x', pt.x);
-            label.setAttribute('y', pt.y);
-            label.classList.add('custom-vertex-label');
-            label.textContent = String(idx + 1);
-            g.appendChild(label);
-        });
 
         els.layerCustom.appendChild(g);
     }
@@ -1004,7 +1028,7 @@
         state.paused = false;
         state.polygons = [];
         state.customPoints = [];
-        state.customClosed = false;
+        state.customDrafts = [];
         state.customEdgeMeta = null;
         state.showGenDots = state.mode === 'custom';
         state.ghostPoint = null;
@@ -1014,7 +1038,6 @@
     }
 
     function generatePolygonsForMode(settings) {
-        if (state.mode === 'composition') return generateCompositionPolygons(settings);
         if (state.mode === 'complex') return generateComplexPolygons(settings);
         return generateSinglePolygon(settings);
     }
@@ -1052,7 +1075,7 @@
         const scaleY = CANVAS / rect.height;
         const x = (clientX - rect.left) * scaleX;
         const y = (clientY - rect.top) * scaleY;
-        const threshold = 20;
+        const threshold = 28;
 
         let best = null;
         let bestDist = threshold;
@@ -1068,17 +1091,27 @@
         return best;
     }
 
-    function closeCustomPolygon() {
-        if (state.customPoints.length < 3) return;
-        state.customClosed = true;
+    function saveCurrentCustomPolygon() {
+        if (state.customPoints.length < 3) return false;
+        const settings = getSettings();
+        state.customDrafts.push({
+            vertices: state.customPoints.map(pt => ({ ...pt })),
+            edgeMeta: getCustomEdgeMeta(settings).map(edge => ({ ...edge }))
+        });
+        state.customPoints = [];
+        state.customEdgeMeta = null;
         state.ghostPoint = null;
-        setStatus('多邊形已閉合 — 可按「開始練習」');
+        return true;
+    }
+
+    function closeCustomPolygon() {
+        if (!saveCurrentCustomPolygon()) return;
+        setStatus(`第 ${state.customDrafts.length} 個多邊形已完成 — 繼續選點或按「開始練習」`);
         render();
     }
 
     function handleCustomGridClick(pt) {
         if (state.mode !== 'custom' || state.phase === 'timing' || state.phase === 'revealed') return;
-        if (state.customClosed) return;
 
         const key = pointKey(pt);
         const selectedKeys = state.customPoints.map(pointKey);
@@ -1096,7 +1129,12 @@
             return;
         }
 
-        if (selectedKeys.includes(key)) return;
+        if (selectedKeys.includes(key)) {
+            if (pointKey(state.customPoints[0]) === key && state.customPoints.length >= 3) {
+                closeCustomPolygon();
+            }
+            return;
+        }
 
         state.customPoints.push({ ...pt });
         invalidateCustomEdgeMeta();
@@ -1105,12 +1143,36 @@
         render();
     }
 
+    function collectCustomPolygonsForPractice(settings) {
+        return state.customDrafts.map(draft => ({
+            vertices: draft.vertices,
+            edgeMeta: draft.edgeMeta
+        }));
+    }
+
+    function handleClearLastCustom() {
+        if (state.customPoints.length > 0) {
+            state.customPoints = [];
+            state.customEdgeMeta = null;
+            state.ghostPoint = null;
+            setStatus(state.customDrafts.length
+                ? `已清除目前選點 — 已儲存 ${state.customDrafts.length} 個多邊形`
+                : '自訂模式 — 點選格子交叉點');
+        } else if (state.customDrafts.length > 0) {
+            state.customDrafts.pop();
+            setStatus(state.customDrafts.length
+                ? `已刪除上一個多邊形 — 目前共 ${state.customDrafts.length} 個`
+                : '自訂模式 — 點選格子交叉點');
+        }
+        render();
+    }
+
     function handleStartCustom() {
-        if (!state.customClosed || state.customPoints.length < 3) return;
         const settings = getSettings();
-        state.polygons = [createPolygon([...state.customPoints], settings, getCustomEdgeMeta(settings))];
+        const polygons = collectCustomPolygonsForPractice(settings);
+        if (!polygons.length) return;
         els.layerCustom.innerHTML = '';
-        startPractice(state.polygons);
+        startPractice(polygons);
     }
 
     function switchMode(mode) {
@@ -1119,6 +1181,7 @@
         const hasActiveSession = state.phase === 'timing'
             || state.phase === 'revealed'
             || state.customPoints.length > 0
+            || state.customDrafts.length > 0
             || state.polygons.length > 0;
 
         if (hasActiveSession && !window.confirm('切換模式將會重設目前練習，確定嗎？')) {
@@ -1129,7 +1192,6 @@
             clearTimer();
         }
         state.mode = mode;
-        updateShapeCountHint();
         els.modeTabs.forEach(tab => {
             const active = tab.dataset.mode === mode;
             tab.classList.toggle('active', active);
@@ -1159,10 +1221,11 @@
 
         els.curveStrength.addEventListener('input', () => {
             els.curveStrengthLabel.textContent = (els.curveStrength.value / 100).toFixed(2);
-            if (state.mode === 'custom' && state.customPoints.length > 0) {
+            if (state.mode === 'custom' && (state.customPoints.length > 0 || state.customDrafts.length > 0)) {
                 invalidateCustomEdgeMeta();
             }
-            if (state.phase === 'revealed' || (state.mode === 'custom' && state.customPoints.length > 0)) {
+            if (state.phase === 'revealed'
+                || (state.mode === 'custom' && (state.customPoints.length > 0 || state.customDrafts.length > 0))) {
                 render();
             }
         });
@@ -1178,13 +1241,11 @@
             els.timerCustom.classList.toggle('hidden', els.timerDuration.value !== 'custom');
         });
 
-        if (els.allowOverlap) {
-            els.allowOverlap.addEventListener('change', updateShapeCountHint);
-        }
-
         document.querySelectorAll('input[name="display-mode"]').forEach(radio => {
             radio.addEventListener('change', () => {
-                if (state.polygons.length) render();
+                const hasCustomPreview = state.mode === 'custom'
+                    && (state.customDrafts.length > 0 || state.customPoints.length > 0);
+                if (state.polygons.length || hasCustomPreview) render();
             });
         });
 
@@ -1204,7 +1265,8 @@
         els.btnRegenerate.addEventListener('click', handleRegenerate);
         els.btnFinishPoints.addEventListener('click', closeCustomPolygon);
         els.btnStartCustom.addEventListener('click', handleStartCustom);
-        els.btnClearCustom.addEventListener('click', resetToIdle);
+        els.btnClearLastCustom.addEventListener('click', handleClearLastCustom);
+        els.btnClearAllCustom.addEventListener('click', resetToIdle);
 
         els.svg.addEventListener('click', e => {
             if (state.mode !== 'custom') return;
@@ -1219,7 +1281,7 @@
         });
 
         els.svg.addEventListener('mousemove', e => {
-            if (state.mode !== 'custom' || state.customClosed || state.customPoints.length === 0) return;
+            if (state.mode !== 'custom' || state.customPoints.length === 0) return;
             if (state.phase === 'timing' || state.phase === 'revealed') return;
 
             const rect = els.svg.getBoundingClientRect();
@@ -1249,7 +1311,6 @@
     function init() {
         syncSettingsInputs();
         bindEvents();
-        updateShapeCountHint();
         switchMode('single');
     }
 

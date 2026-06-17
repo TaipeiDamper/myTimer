@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>多邊形型準練習 | Aura Timer</title>
-    <meta name="description" content="網格式多邊形型準練習工具，支援單形、構圖、困難與自訂模式。">
+    <meta name="description" content="網格式多邊形型準練習工具，支援單形、困難與自訂模式。">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -27,7 +27,6 @@
 
         <nav class="mode-tabs" role="tablist" aria-label="練習模式">
             <button type="button" class="mode-tab active" data-mode="single" role="tab" aria-selected="true">單形練習</button>
-            <button type="button" class="mode-tab" data-mode="composition" role="tab" aria-selected="false">構圖模式</button>
             <button type="button" class="mode-tab" data-mode="complex" role="tab" aria-selected="false">困難模式</button>
             <button type="button" class="mode-tab" data-mode="custom" role="tab" aria-selected="false">自訂模式</button>
         </nav>
@@ -62,7 +61,7 @@
                     </label>
                 </div>
 
-                <div class="form-group mode-field" data-modes="single,composition,complex">
+                <div class="form-group mode-field" data-modes="single,complex">
                     <label for="vertex-count">頂點數</label>
                     <select id="vertex-count">
                         <option value="random">隨機 4–6</option>
@@ -75,7 +74,7 @@
                     </select>
                 </div>
 
-                <div class="form-group mode-field" data-modes="single,composition,custom">
+                <div class="form-group mode-field" data-modes="single,complex,custom">
                     <label for="edge-type">邊型</label>
                     <select id="edge-type">
                         <option value="straight">全直線</option>
@@ -84,24 +83,20 @@
                     </select>
                 </div>
 
-                <div class="form-group mode-field" data-modes="single,composition,custom">
+                <div class="form-group mode-field" data-modes="single,complex,custom">
                     <label for="curve-strength">弧度強度</label>
                     <input type="range" id="curve-strength" min="5" max="70" value="30" aria-label="弧度強度">
                     <span id="curve-strength-label" class="range-label">0.30</span>
                 </div>
 
-                <div class="form-group mode-field" data-modes="composition,complex">
-                    <label for="shape-count">要畫幾個形狀？</label>
+                <div class="form-group mode-field" data-modes="complex">
+                    <label for="shape-count">由幾個形狀組合？</label>
                     <select id="shape-count">
                         <option value="2">2 個</option>
                         <option value="3" selected>3 個</option>
                         <option value="4">4 個</option>
                     </select>
-                    <p id="shape-count-hint" class="field-hint">構圖模式：形狀分區擺放，彼此不重疊</p>
-                    <label class="toggle-row mode-field" data-modes="composition">
-                        <input type="checkbox" id="allow-overlap" aria-label="允許形狀重疊">
-                        <span>允許形狀重疊（可分布於各角落）</span>
-                    </label>
+                    <p id="shape-count-hint" class="field-hint">多形合併填滿後取外框（輪廓或填滿）</p>
                 </div>
 
                 <div class="form-group">
@@ -125,13 +120,14 @@
                     <input type="number" id="timer-custom" class="hidden" min="5" max="600" value="90" placeholder="秒數" aria-label="自訂計時秒數">
                 </div>
 
-                <div class="action-group mode-field" data-modes="single,composition,complex">
+                <div class="action-group mode-field" data-modes="single,complex">
                     <button type="button" id="btn-generate" class="btn btn-primary">生成並開始</button>
                 </div>
                 <div class="action-group mode-field hidden" data-modes="custom">
                     <button type="button" id="btn-finish-points" class="btn btn-outline" disabled>完成選點</button>
                     <button type="button" id="btn-start-custom" class="btn btn-primary" disabled>開始練習</button>
-                    <button type="button" id="btn-clear-custom" class="btn btn-outline">清除重畫</button>
+                    <button type="button" id="btn-clear-last-custom" class="btn btn-outline" disabled>清除上一個</button>
+                    <button type="button" id="btn-clear-all-custom" class="btn btn-outline" disabled>清除全部</button>
                 </div>
             </aside>
 
@@ -150,8 +146,8 @@
                         <g id="layer-obs-grid"></g>
                         <g id="layer-gen-grid"></g>
                         <g id="layer-shapes"></g>
-                        <g id="layer-gen-dots"></g>
                         <g id="layer-custom"></g>
+                        <g id="layer-gen-dots"></g>
                     </svg>
                 </div>
 
@@ -159,7 +155,7 @@
                     <button type="button" id="btn-reveal" class="btn btn-outline" disabled>揭露答案</button>
                     <button type="button" id="btn-regenerate" class="btn btn-outline" disabled>重新生成</button>
                 </div>
-                <p id="custom-hint" class="custom-hint hidden">點擊格子交叉點依序選頂點；點回第一點或按「完成選點」可閉合多邊形。</p>
+                <p id="custom-hint" class="custom-hint hidden">點選格子交叉點依序選頂點；閉合後自動儲存並可繼續畫下一個，完成後按「開始練習」。</p>
             </section>
         </main>
 
