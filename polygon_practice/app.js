@@ -7,6 +7,7 @@
     const CANVAS = 600;
     const MARGIN = 50;
     const USABLE = CANVAS - MARGIN * 2;
+    const UNION_RASTER_SIZE = 512;
     const DEFAULT_TITLE = '多邊形型準練習 | Aura Timer';
 
     const SHAPE_COLORS = [
@@ -39,6 +40,7 @@
         shapeCount: document.getElementById('shape-count'),
         shapeCountLabel: document.querySelector('label[for="shape-count"]'),
         shapeCountHint: document.getElementById('shape-count-hint'),
+        allowOverlap: document.getElementById('allow-overlap'),
         timerDuration: document.getElementById('timer-duration'),
         timerCustom: document.getElementById('timer-custom'),
         btnGenerate: document.getElementById('btn-generate'),
@@ -107,6 +109,7 @@
             edgeType: els.edgeType.value,
             curveStrength: clampNumber(els.curveStrength.value, 5, 70, 30) / 100,
             shapeCount: clampInteger(els.shapeCount.value, 2, 4, 3),
+            allowOverlap: Boolean(els.allowOverlap?.checked),
             displayMode: document.querySelector('input[name="display-mode"]:checked')?.value || 'outline',
             timerSeconds: timerVal
         };
@@ -121,12 +124,20 @@
         if (state.mode === 'complex') {
             if (els.shapeCountLabel) els.shapeCountLabel.textContent = '由幾個形狀組合？';
             if (els.shapeCountHint) {
-                els.shapeCountHint.textContent = '困難模式：多個多邊形可在畫布上交錯重疊，練習複製整體構圖';
+                els.shapeCountHint.textContent = '困難模式：多形合併填滿後取外框（輪廓或填滿）';
+            }
+        } else if (state.mode === 'composition') {
+            if (els.shapeCountLabel) els.shapeCountLabel.textContent = '要畫幾個形狀？';
+            if (els.shapeCountHint) {
+                const overlap = els.allowOverlap?.checked;
+                els.shapeCountHint.textContent = overlap
+                    ? '構圖模式：形狀可分布於各角落並互相重疊'
+                    : '構圖模式：形狀分區擺放，彼此不重疊';
             }
         } else {
             if (els.shapeCountLabel) els.shapeCountLabel.textContent = '要畫幾個形狀？';
             if (els.shapeCountHint) {
-                els.shapeCountHint.textContent = '構圖模式：畫布左右分區，每區一個形狀（彼此不重疊）';
+                els.shapeCountHint.textContent = '構圖模式：形狀分區擺放，彼此不重疊';
             }
         }
     }
@@ -287,6 +298,238 @@
         return colors[idx % colors.length];
     }
 
+    function filterPointsInZone(points, zone, cols, rows) {
+        const colMin = Math.max(0, Math.floor(zone.colMin));
+        const colMax = Math.min(cols, Math.ceil(zone.colMax));
+        const rowMin = Math.max(0, Math.floor(zone.rowMin));
+        const rowMax = Math.min(rows, Math.ceil(zone.rowMax));
+        return points.filter(p => p.col >= colMin && p.col <= colMax && p.row >= rowMin && p.row <= rowMax);
+    }
+
+    function getCompositionZones(count, cols, rows, allowOverlap) {
+        const c = cols;
+        const r = rows;
+
+        if (!allowOverlap) {
+            if (count === 2) {
+                const midC = Math.max(1, Math.floor(c / 2));
+                return [
+                    { colMin: 0, colMax: midC, rowMin: 0, rowMax: r },
+                    { colMin: midC, colMax: c, rowMin: 0, rowMax: r }
+                ];
+            }
+            if (count === 4) {
+                const midC = Math.max(1, Math.floor(c / 2));
+                const midR = Math.max(1, Math.floor(r / 2));
+                return [
+                    { colMin: 0, colMax: midC, rowMin: 0, rowMax: midR },
+                    { colMin: midC, colMax: c, rowMin: 0, rowMax: midR },
+                    { colMin: 0, colMax: midC, rowMin: midR, rowMax: r },
+                    { colMin: midC, colMax: c, rowMin: midR, rowMax: r }
+                ];
+            }
+            const zones = [];
+            for (let i = 0; i < count; i += 1) {
+                const colStart = Math.floor((i * (c + 1)) / count);
+                const colEnd = Math.floor(((i + 1) * (c + 1)) / count) - 1;
+                zones.push({ colMin: colStart, colMax: colEnd, rowMin: 0, rowMax: r });
+            }
+            return zones;
+        }
+
+        const pad = Math.max(1, Math.floor(Math.min(c, r) * 0.32));
+        const overlapZones = {
+            2: [
+                { colMin: 0, colMax: c - pad, rowMin: 0, rowMax: r - pad },
+                { colMin: pad, colMax: c, rowMin: pad, rowMax: r }
+            ],
+            3: [
+                { colMin: 0, colMax: c - pad, rowMin: 0, rowMax: r - pad },
+                { colMin: pad, colMax: c, rowMin: 0, rowMax: r - pad },
+                { colMin: 0, colMax: c, rowMin: pad, rowMax: r }
+            ],
+            4: [
+                { colMin: 0, colMax: c - pad, rowMin: 0, rowMax: r - pad },
+                { colMin: pad, colMax: c, rowMin: 0, rowMax: r - pad },
+                { colMin: 0, colMax: c - pad, rowMin: pad, rowMax: r },
+                { colMin: pad, colMax: c, rowMin: pad, rowMax: r }
+            ]
+        };
+        return shuffleArray(overlapZones[count] || overlapZones[3]);
+    }
+
+    function dedupeNearbyVertices(vertices, minDist) {
+        if (!vertices.length) return [];
+        const result = [vertices[0]];
+        for (let i = 1; i < vertices.length; i += 1) {
+            const prev = result[result.length - 1];
+            const cur = vertices[i];
+            if (Math.hypot(cur.x - prev.x, cur.y - prev.y) >= minDist) {
+                result.push(cur);
+            }
+        }
+        if (result.length > 2) {
+            const first = result[0];
+            const last = result[result.length - 1];
+            if (Math.hypot(first.x - last.x, first.y - last.y) < minDist) {
+                result.pop();
+            }
+        }
+        return result.length >= 3 ? result : vertices;
+    }
+
+    function perpendicularDistance(point, lineStart, lineEnd) {
+        const dx = lineEnd.x - lineStart.x;
+        const dy = lineEnd.y - lineStart.y;
+        const lenSq = dx * dx + dy * dy;
+        if (lenSq === 0) return Math.hypot(point.x - lineStart.x, point.y - lineStart.y);
+        const t = ((point.x - lineStart.x) * dx + (point.y - lineStart.y) * dy) / lenSq;
+        const projX = lineStart.x + t * dx;
+        const projY = lineStart.y + t * dy;
+        return Math.hypot(point.x - projX, point.y - projY);
+    }
+
+    function simplifyContour(points, epsilon) {
+        if (points.length <= 2) return points;
+
+        let maxDist = 0;
+        let maxIdx = 0;
+        const end = points.length - 1;
+        for (let i = 1; i < end; i += 1) {
+            const dist = perpendicularDistance(points[i], points[0], points[end]);
+            if (dist > maxDist) {
+                maxDist = dist;
+                maxIdx = i;
+            }
+        }
+
+        if (maxDist > epsilon) {
+            const left = simplifyContour(points.slice(0, maxIdx + 1), epsilon);
+            const right = simplifyContour(points.slice(maxIdx), epsilon);
+            return left.slice(0, -1).concat(right);
+        }
+        return [points[0], points[end]];
+    }
+
+    function traceLargestContour(mask, w, h) {
+        let sx = -1;
+        let sy = -1;
+
+        for (let y = 1; y < h - 1 && sx < 0; y += 1) {
+            for (let x = 1; x < w - 1; x += 1) {
+                if (mask[y * w + x] && !mask[(y - 1) * w + x]) {
+                    sx = x;
+                    sy = y;
+                    break;
+                }
+            }
+        }
+        if (sx < 0) return [];
+
+        const neighbors = [
+            { dx: 1, dy: 0 }, { dx: 1, dy: 1 }, { dx: 0, dy: 1 }, { dx: -1, dy: 1 },
+            { dx: -1, dy: 0 }, { dx: -1, dy: -1 }, { dx: 0, dy: -1 }, { dx: 1, dy: -1 }
+        ];
+
+        const contour = [{ x: sx, y: sy }];
+        let px = sx;
+        let py = sy;
+        let backtrack = 4;
+        let steps = 0;
+
+        do {
+            let moved = false;
+            for (let i = 0; i < 8; i += 1) {
+                const ni = (backtrack + i) % 8;
+                const nx = px + neighbors[ni].dx;
+                const ny = py + neighbors[ni].dy;
+                if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                if (!mask[ny * w + nx]) continue;
+                px = nx;
+                py = ny;
+                contour.push({ x: px, y: py });
+                backtrack = (ni + 4) % 8;
+                moved = true;
+                break;
+            }
+            if (!moved) break;
+            steps += 1;
+        } while ((px !== sx || py !== sy) && steps < w * h * 2);
+
+        return contour;
+    }
+
+    function contourToVertices(contour, settings, rasterSize) {
+        const scale = CANVAS / rasterSize;
+        const raw = contour.map(p => ({
+            x: p.x * scale,
+            y: p.y * scale
+        }));
+        const simplified = dedupeNearbyVertices(raw, 4);
+        return simplified.length >= 3 ? simplified : raw;
+    }
+
+    function buildUnionSilhouette(parts, settings) {
+        if (!parts.length) return null;
+
+        const size = UNION_RASTER_SIZE;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        if (!ctx) return null;
+
+        const scale = size / CANVAS;
+        ctx.setTransform(scale, 0, 0, scale, 0, 0);
+        ctx.fillStyle = '#fff';
+
+        parts.forEach(poly => {
+            const d = buildShapePath(poly.vertices, poly.edgeMeta, settings.curveStrength, true);
+            if (!d) return;
+            try {
+                ctx.fill(new Path2D(d));
+            } catch {
+                // Path2D unsupported — skip
+            }
+        });
+
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        const imageData = ctx.getImageData(0, 0, size, size);
+        const mask = new Uint8Array(size * size);
+        for (let i = 0; i < size * size; i += 1) {
+            mask[i] = imageData.data[i * 4 + 3] > 48 ? 1 : 0;
+        }
+
+        const contour = traceLargestContour(mask, size, size);
+        if (contour.length < 8) return null;
+
+        const simplified = simplifyContour(contour, 3.5);
+        const vertices = contourToVertices(simplified, settings, size);
+        if (vertices.length < 3) return null;
+
+        const verticesWithGrid = vertices.map(v => {
+            const col = clampInteger(((v.x - MARGIN) / USABLE) * settings.genCols, 0, settings.genCols, 0);
+            const row = clampInteger(((v.y - MARGIN) / USABLE) * settings.genRows, 0, settings.genRows, 0);
+            return { ...v, col, row };
+        });
+
+        return {
+            vertices: verticesWithGrid,
+            edgeMeta: buildEdgeMeta(verticesWithGrid.length, 'straight'),
+            isUnionSilhouette: true,
+            sourceParts: parts
+        };
+    }
+
+    function getPolygonPathD(poly, curveStrength) {
+        return buildShapePath(poly.vertices, poly.edgeMeta, curveStrength, true);
+    }
+
+    function getPolygonVertexSources(poly) {
+        if (poly.sourceParts && poly.sourceParts.length) return poly.sourceParts;
+        return [poly];
+    }
+
     function invalidateCustomEdgeMeta() {
         state.customEdgeMeta = null;
     }
@@ -367,20 +610,17 @@
         return [createPolygon(hull, settings)];
     }
 
-    function filterPointsInColRange(points, colMin, colMax) {
-        return points.filter(p => p.col >= colMin && p.col <= colMax);
-    }
-
-    function generateCompositionPolygons(settings) {
+    function generateCompositionPolygons(settings, forceOverlap = null) {
         const allPoints = buildGridPoints(settings.genCols, settings.genRows);
         const polygons = [];
         const count = settings.shapeCount;
         const k = randomVertexCount(settings.vertexCount);
+        const allowOverlap = forceOverlap !== null ? forceOverlap : settings.allowOverlap;
+        const zones = getCompositionZones(count, settings.genCols, settings.genRows, allowOverlap);
 
         for (let i = 0; i < count; i += 1) {
-            const colStart = Math.floor((i * (settings.genCols + 1)) / count);
-            const colEnd = Math.floor(((i + 1) * (settings.genCols + 1)) / count) - 1;
-            const pool = filterPointsInColRange(allPoints, colStart, colEnd);
+            const zone = zones[i % zones.length];
+            const pool = filterPointsInZone(allPoints, zone, settings.genCols, settings.genRows);
             const hull = sampleHullFromPoints(pool, Math.max(3, k - 1 + Math.floor(Math.random() * 2)));
             if (hull) {
                 polygons.push(createPolygon(hull, settings));
@@ -394,22 +634,14 @@
     }
 
     function generateComplexPolygons(settings) {
-        const pool = buildGridPoints(settings.genCols, settings.genRows);
-        const polygons = [];
-        const count = settings.shapeCount;
-        const k = randomVertexCount(settings.vertexCount);
+        const parts = generateCompositionPolygons(settings, true);
+        const silhouette = buildUnionSilhouette(parts, settings);
 
-        for (let i = 0; i < count; i += 1) {
-            const hull = sampleHullFromPoints(pool, Math.max(3, k - 1 + Math.floor(Math.random() * 2)));
-            if (hull) {
-                polygons.push(createPolygon(hull, settings));
-            }
+        if (silhouette) {
+            return [silhouette];
         }
 
-        if (polygons.length === 0) {
-            return generateSinglePolygon(settings);
-        }
-        return polygons;
+        return parts.length ? parts : generateSinglePolygon(settings);
     }
 
     function clearTimer() {
@@ -584,7 +816,9 @@
     function getUsedVertexKeys() {
         const keys = new Set();
         state.polygons.forEach(poly => {
-            poly.vertices.forEach(v => keys.add(`${v.col},${v.row}`));
+            getPolygonVertexSources(poly).forEach(part => {
+                part.vertices.forEach(v => keys.add(`${v.col},${v.row}`));
+            });
         });
         if (state.mode === 'custom' && state.customPoints.length > 0) {
             state.customPoints.forEach(pt => keys.add(`${pt.col},${pt.row}`));
@@ -639,7 +873,7 @@
             const combined = document.createElementNS('http://www.w3.org/2000/svg', 'path');
             let d = `M 0 0 H ${CANVAS} V ${CANVAS} H 0 Z`;
             state.polygons.forEach(poly => {
-                d += ` ${buildShapePath(poly.vertices, poly.edgeMeta, settings.curveStrength, true)}`;
+                d += ` ${getPolygonPathD(poly, settings.curveStrength)}`;
             });
             combined.setAttribute('d', d);
             combined.setAttribute('fill', 'rgba(16, 185, 129, 0.35)');
@@ -649,7 +883,7 @@
 
             state.polygons.forEach((poly, idx) => {
                 const outline = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                outline.setAttribute('d', buildShapePath(poly.vertices, poly.edgeMeta, settings.curveStrength, true));
+                outline.setAttribute('d', getPolygonPathD(poly, settings.curveStrength));
                 outline.setAttribute('fill', 'none');
                 outline.setAttribute('stroke', getPolygonDisplayColor(idx, colors).stroke);
                 outline.setAttribute('stroke-width', '2');
@@ -659,7 +893,7 @@
             state.polygons.forEach((poly, idx) => {
                 const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 const shapeColors = getPolygonDisplayColor(idx, colors);
-                path.setAttribute('d', buildShapePath(poly.vertices, poly.edgeMeta, settings.curveStrength, true));
+                path.setAttribute('d', getPolygonPathD(poly, settings.curveStrength));
                 path.setAttribute('stroke', shapeColors.stroke);
                 path.setAttribute('stroke-width', '2.5');
                 path.setAttribute('fill', displayMode === 'fill' ? shapeColors.fill : 'none');
@@ -943,6 +1177,10 @@
         els.timerDuration.addEventListener('change', () => {
             els.timerCustom.classList.toggle('hidden', els.timerDuration.value !== 'custom');
         });
+
+        if (els.allowOverlap) {
+            els.allowOverlap.addEventListener('change', updateShapeCountHint);
+        }
 
         document.querySelectorAll('input[name="display-mode"]').forEach(radio => {
             radio.addEventListener('change', () => {

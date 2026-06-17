@@ -97,7 +97,11 @@
                         <option value="3" selected>3 個</option>
                         <option value="4">4 個</option>
                     </select>
-                    <p id="shape-count-hint" class="field-hint">構圖模式：畫布左右分區，每區一個形狀（彼此不重疊）</p>
+                    <p id="shape-count-hint" class="field-hint">構圖模式：形狀分區擺放，彼此不重疊</p>
+                    <label class="toggle-row mode-field" data-modes="composition">
+                        <input type="checkbox" id="allow-overlap" aria-label="允許形狀重疊">
+                        <span>允許形狀重疊（可分布於各角落）</span>
+                    </label>
                 </div>
 
                 <div class="form-group">
