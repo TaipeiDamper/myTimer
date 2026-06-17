@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多邊形型準練習 | Aura Timer</title>
+    <meta name="description" content="網格式多邊形型準練習工具，支援單形、構圖、困難與自訂模式。">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="bg-glow"></div>
+    <div class="bg-grid"></div>
+
+    <div class="app-container">
+        <header class="app-header">
+            <div class="logo">
+                <span class="logo-icon">◇</span>
+                <div class="logo-text-group">
+                    <span class="logo-text">AURA TIMER</span>
+                    <span class="logo-sub">多邊形型準練習</span>
+                </div>
+            </div>
+        </header>
+
+        <nav class="mode-tabs" role="tablist" aria-label="練習模式">
+            <button type="button" class="mode-tab active" data-mode="single" role="tab" aria-selected="true">單形練習</button>
+            <button type="button" class="mode-tab" data-mode="composition" role="tab" aria-selected="false">構圖模式</button>
+            <button type="button" class="mode-tab" data-mode="complex" role="tab" aria-selected="false">困難模式</button>
+            <button type="button" class="mode-tab" data-mode="custom" role="tab" aria-selected="false">自訂模式</button>
+        </nav>
+
+        <main class="practice-layout">
+            <aside class="settings-panel card">
+                <h3>練習設定</h3>
+
+                <div class="form-group">
+                    <label>生成格子 (N × M)</label>
+                    <div class="input-row">
+                        <input type="number" id="gen-cols" min="3" max="12" value="6" aria-label="生成格子欄數">
+                        <span class="input-sep">×</span>
+                        <input type="number" id="gen-rows" min="3" max="12" value="5" aria-label="生成格子列數">
+                    </div>
+                    <label class="toggle-row">
+                        <input type="checkbox" id="toggle-gen-grid" aria-label="顯示生成格子">
+                        <span>顯示生成格子</span>
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label>觀察格子 (n × m)</label>
+                    <div class="input-row">
+                        <input type="number" id="obs-cols" min="2" max="8" value="3" aria-label="觀察格子欄數">
+                        <span class="input-sep">×</span>
+                        <input type="number" id="obs-rows" min="2" max="8" value="3" aria-label="觀察格子列數">
+                    </div>
+                    <label class="toggle-row">
+                        <input type="checkbox" id="toggle-obs-grid" checked aria-label="顯示觀察格子">
+                        <span>顯示觀察格子</span>
+                    </label>
+                </div>
+
+                <div class="form-group mode-field" data-modes="single,composition,complex">
+                    <label for="vertex-count">頂點數</label>
+                    <select id="vertex-count">
+                        <option value="random">隨機 4–6</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                        <option value="6">6</option>
+                        <option value="7">7</option>
+                        <option value="8">8</option>
+                    </select>
+                </div>
+
+                <div class="form-group mode-field" data-modes="single,composition,custom">
+                    <label for="edge-type">邊型</label>
+                    <select id="edge-type">
+                        <option value="straight">全直線</option>
+                        <option value="mixed">半直半弧</option>
+                        <option value="curve">全弧線</option>
+                    </select>
+                </div>
+
+                <div class="form-group mode-field" data-modes="single,composition,custom">
+                    <label for="curve-strength">弧度強度</label>
+                    <input type="range" id="curve-strength" min="5" max="70" value="30" aria-label="弧度強度">
+                    <span id="curve-strength-label" class="range-label">0.30</span>
+                </div>
+
+                <div class="form-group mode-field" data-modes="composition,complex">
+                    <label for="shape-count">要畫幾個形狀？</label>
+                    <select id="shape-count">
+                        <option value="2">2 個</option>
+                        <option value="3" selected>3 個</option>
+                        <option value="4">4 個</option>
+                    </select>
+                    <p id="shape-count-hint" class="field-hint">構圖模式：畫布左右分區，每區一個形狀（彼此不重疊）</p>
+                </div>
+
+                <div class="form-group">
+                    <label>顯示模式</label>
+                    <div class="radio-group" role="radiogroup" aria-label="顯示模式">
+                        <label class="radio-chip"><input type="radio" name="display-mode" value="outline" checked> 輪廓</label>
+                        <label class="radio-chip"><input type="radio" name="display-mode" value="fill"> 填滿</label>
+                        <label class="radio-chip"><input type="radio" name="display-mode" value="invert"> 反選</label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="timer-duration">計時時間</label>
+                    <select id="timer-duration">
+                        <option value="15">15 秒</option>
+                        <option value="30">30 秒</option>
+                        <option value="60" selected>60 秒</option>
+                        <option value="120">120 秒</option>
+                        <option value="custom">自訂...</option>
+                    </select>
+                    <input type="number" id="timer-custom" class="hidden" min="5" max="600" value="90" placeholder="秒數" aria-label="自訂計時秒數">
+                </div>
+
+                <div class="action-group mode-field" data-modes="single,composition,complex">
+                    <button type="button" id="btn-generate" class="btn btn-primary">生成並開始</button>
+                </div>
+                <div class="action-group mode-field hidden" data-modes="custom">
+                    <button type="button" id="btn-finish-points" class="btn btn-outline" disabled>完成選點</button>
+                    <button type="button" id="btn-start-custom" class="btn btn-primary" disabled>開始練習</button>
+                    <button type="button" id="btn-clear-custom" class="btn btn-outline">清除重畫</button>
+                </div>
+            </aside>
+
+            <section class="canvas-panel card">
+                <div class="status-bar">
+                    <span id="status-label" class="status-label">準備就緒</span>
+                    <div class="timer-group hidden" id="timer-group">
+                        <button type="button" id="btn-pause" class="btn btn-pause" aria-label="暫停計時">暫停</button>
+                        <span id="timer-display" class="timer-display">01:00</span>
+                    </div>
+                </div>
+
+                <div class="canvas-wrapper">
+                    <svg id="practice-svg" viewBox="0 0 600 600" preserveAspectRatio="xMidYMid meet" aria-label="練習畫布">
+                        <g id="layer-border"></g>
+                        <g id="layer-obs-grid"></g>
+                        <g id="layer-gen-grid"></g>
+                        <g id="layer-shapes"></g>
+                        <g id="layer-gen-dots"></g>
+                        <g id="layer-custom"></g>
+                    </svg>
+                </div>
+
+                <div class="canvas-controls">
+                    <button type="button" id="btn-reveal" class="btn btn-outline" disabled>揭露答案</button>
+                    <button type="button" id="btn-regenerate" class="btn btn-outline" disabled>重新生成</button>
+                </div>
+                <p id="custom-hint" class="custom-hint hidden">點擊格子交叉點依序選頂點；點回第一點或按「完成選點」可閉合多邊形。</p>
+            </section>
+        </main>
+
+        <footer class="app-footer">
+            <p>© 2026 Aura Timer · 多邊形型準練習</p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
